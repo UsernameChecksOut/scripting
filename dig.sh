@@ -13,11 +13,11 @@
 ### Function defininitons below ###
 
 # dig from a public NS
-
 public_dig() {
         digg="dig +short @1.1.1.1"
 	a_rec=$($digg A $domain)
 
+	echo -e "Getting DNS records from a public resolver (1.1.1.1):\n"
         echo -e "\nDomain is: $domain\n"
         echo -e "Authoritative NS are: \n$($digg NS $domain)\n"
         echo -e "A record is: \n$($digg A $domain)\n"
@@ -25,15 +25,23 @@ public_dig() {
 	echo -e "TXT records are: \n$($digg TXT $domain)\n"
 	echo -e "DKIM record is: \n$($digg TXT \
 		'default._domainkey.'$domain)\n"
-	echo -e "PTR record (rDNS) is: \n$($digg -x $a_rec)\n"
+	echo -e "PTR record (rDNS) is: \n$($digg -x $a_rec 2>/dev/null)\n"
 }
 
 # dig from an authoritative NS
-# will do a whois to get the NS
-
 local_dig() {
-	ns=$(whois $domain | grep -i 'name server' | head -1 | cut -d: -f2 | \
+	ns=$(whois $domain 2>/dev/null | grep -i 'name server' | head -1 | cut -d: -f2 | \
 		cut -d' ' -f2)
+	
+	# check if whois can get the NS (can't if unsupported TLD, for example)
+	if [[ -z "$ns" ]]; then
+		echo "Error: WHOIS for domain $domain failed - can't get" \
+		"registered nameservers. Try to do a manual" \
+		"whois to see what's the issue."
+		
+		exit 1
+	fi
+		
 	digg="dig +short @$ns"
 	a_rec=$($digg A $domain)
 
@@ -45,24 +53,37 @@ local_dig() {
         echo -e "TXT records are: \n$($digg TXT $domain)\n"
         echo -e "DKIM record is: \n$($digg TXT \
 		'default._domainkey.'$domain)\n"
-	echo -e "PTR record (rDNS) is: \n$(dig -x $a_rec @1.1.1.1 +short)\n"
+	echo -e "PTR record (rDNS) is: \n$(dig -x $a_rec @1.1.1.1 +short \
+		2>/dev/null)\n"
 }
 
 
 ### End Function definitions ###
 
 
+### Start actual work ###
 
 
-# Prompt for domain and NS to use
+# Prompt for domain, check if it's empty
 
 echo -ne "\nWhat's the domain? "
 
-read domain
+while read domain; do
 
-echo -e "\nWhat NS to use for dig? [1/2/3]: \n \
-1) Public (1.1.1.1) \n \
-2) Local (Authorative) \n \
+	# check if domain is empty
+	if [[ -z "$domain" ]]; then
+		echo "Invalid domain. Try again"
+		continue
+	fi
+	break
+done
+
+
+# Prompt for resolver
+
+echo -e "\nWhat NS to use for dig? [1/2/3]:
+1) Public (1.1.1.1)
+2) Local (Authorative)
 3) Exit \n"
 
 
